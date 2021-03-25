@@ -1,138 +1,164 @@
-// Global imports -
 import * as THREE from 'three';
-import TWEEN from '@tweenjs/tween.js';
+import { OrbitControls } from "./controls/OrbitControls.js";
+import { OBJLoader } from "./loaders/OBJLoader.js";
+import { MTLLoader } from "./loaders/MTLLoader.js";
 
-// Local imports -
-// Components
-import Renderer from './components/renderer';
-import Camera from './components/camera';
-import Light from './components/light';
-import Controls from './components/controls';
-import Geometry from './components/geometry';
+function qs(search) {
+    if (typeof search !== "string" || !search) return search;
+    return search.split("&").reduce((res, cur) => {
+        const arr = cur.split("=");
+        return Object.assign({ [arr[0]]: arr[1] }, res)
+    }, {})
+}
 
-// Helpers
-import Stats from './helpers/stats';
-import MeshHelper from './helpers/meshHelper';
-
-// Model
-import Texture from './model/texture';
-import Model from './model/model';
-
-// Managers
-import Interaction from './managers/interaction';
-import DatGUI from './managers/datGUI';
-
-// data
-import Config from './../data/config';
-// -- End of imports
-
-// This class instantiates and ties all of the components together, starts the loading process and renders the main loop
 export default class Main {
-  constructor(container) {
-    // Set container property to container element
-    this.container = container;
+    constructor(container) {
+        let renderer, scene, camera;
+        let object;
+        this.container = container
 
-    // Start Three clock
-    this.clock = new THREE.Clock();
+        let modelName = 'VCOE2100080-S3R1_0'
+        let urlSearch = window.location.search.replace(/^\?/, "")
+        let urlArgs = qs(urlSearch)
+        if(urlArgs.model)
+            modelName = urlArgs['model']
 
-    // Main scene creation
-    this.scene = new THREE.Scene();
-    this.scene.fog = new THREE.FogExp2(Config.fog.color, Config.fog.near);
 
-    // Get Device Pixel Ratio first for retina
-    if(window.devicePixelRatio) {
-      Config.dpr = window.devicePixelRatio;
-    }
+        function setContent(object) {
+            object.updateMatrixWorld();
+            const box = new THREE.Box3().setFromObject(object);
+            const size = box.getSize(new THREE.Vector3()).length();
+            const boxSize = box.getSize();
+            const center = box.getCenter(new THREE.Vector3());
+            object.position.x += object.position.x - center.x;
+            object.position.y += object.position.y - center.y; //修改center.y可以设置模型整体上下偏移
+            object.position.z += object.position.z - center.z;
+            camera.position.copy(center);
+            if (boxSize.x > boxSize.y) {
+                camera.position.z = -boxSize.x * -0.5;
+            } else {
+                camera.position.z = boxSize.y * 3;
+            }
+            camera.lookAt(0, 0, 0);
+        }
+        function init() {
+            // renderer
+            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+            renderer.setClearColor('#B8B8B8', 1.0);
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            document.body.appendChild(renderer.domElement);
 
-    // Main renderer constructor
-    this.renderer = new Renderer(this.scene, container);
+            renderer.outputEncoding = THREE.sRGBEncoding;
 
-    // Components instantiations
-    this.camera = new Camera(this.renderer.threeRenderer);
-    this.controls = new Controls(this.camera.threeCamera, container);
-    this.light = new Light(this.scene);
+            // scene
+            scene = new THREE.Scene();
 
-    // Create and place lights in scene
-    const lights = ['ambient', 'directional', 'point', 'hemi'];
-    lights.forEach((light) => this.light.place(light));
+            // camera
+            camera = new THREE.PerspectiveCamera(
+                40,
+                window.innerWidth / window.innerHeight,
+                1,
+                20000
+            );
+            camera.position.set(-10, 0, 23);
+            scene.add(camera);
 
-    // Create and place geo in scene
-    this.geometry = new Geometry(this.scene);
-    this.geometry.make('plane')(150, 150, 10, 10);
-    this.geometry.place([0, -20, 0], [Math.PI / 2, 0, 0]);
 
-    // Set up rStats if dev environment
-    if(Config.isDev && Config.isShowingStats) {
-      this.stats = new Stats(this.renderer);
-      this.stats.setUp();
-    }
+            function loadModel() {
+                // object.traverse(function (child) {
 
-    // Set up gui
-    if (Config.isDev) {
-      this.gui = new DatGUI(this)
-    }
+                // });
+                console.log("object1:", object);
+                setContent(object);
+                scene.add(object);
+                // container.querySelector('#loading').style.display = 'none';
+                // if(object) {
+                //     console.log("object:", object);
+                //     setContent(object);
+                //     scene.add(object);
+                // }
 
-    // Instantiate texture class
-    this.texture = new Texture();
+            }
 
-    // Start loading the textures and then go on to load the model after the texture Promises have resolved
-    this.texture.load().then(() => {
-      this.manager = new THREE.LoadingManager();
+            const manager = new THREE.LoadingManager(loadModel);
 
-      // Textures loaded, load model
-      this.model = new Model(this.scene, this.manager, this.texture.textures);
-      this.model.load(Config.models[Config.model.selected].type);
+            manager.onProgress = function (item, loaded, total) {
+                console.log(item, loaded, total);
+            };
 
-      // onProgress callback
-      this.manager.onProgress = (item, loaded, total) => {
-        console.log(`${item}: ${loaded} ${total}`);
-      };
+            function onProgress(xhr) {
+                if (xhr.lengthComputable) {
+                    const percentComplete = (xhr.loaded / xhr.total) * 100;
+                    console.log(
+                        "model " + Math.round(percentComplete, 2) + "% downloaded"
+                    );
+                }
+            }
 
-      // All loaders done now
-      this.manager.onLoad = () => {
-        // Set up interaction manager with the app now that the model is finished loading
-        new Interaction(this.renderer.threeRenderer, this.scene, this.camera.threeCamera, this.controls.threeControls);
+            function onError() { }
+            // controls
+            const controls = new OrbitControls(camera, renderer.domElement);
+            controls.addEventListener("change", render);
+            controls.minDistance = 100;
+            controls.maxDistance = 500;
+            controls.enablePan = true;
+            controls.enableDamping = true;
+            // controls.dampingFactor = .9;
 
-        // Add dat.GUI controls if dev
-        if(Config.isDev) {
-          this.meshHelper = new MeshHelper(this.scene, this.model.obj);
-          if (Config.mesh.enableHelper) this.meshHelper.enable();
+            // ambient
+            // scene.add(new THREE.AmbientLight(0xffffff, 0.2));
 
-          this.gui.load(this, this.model.obj);
+            // light
+            const light = new THREE.PointLight(0xffffff, 0.1);
+            camera.add(light);
+
+            const lightRes = new THREE.AmbientLight( 0xffffff, 0.8 );
+            lightRes.position.x = 300;
+            lightRes.position.y = 300;
+            lightRes.position.z = 0;
+            scene.add( lightRes );
+
+            const mtlloader = new MTLLoader(manager);
+            const loader = new OBJLoader(manager);
+            mtlloader
+                .setPath("https://liyang-assets.explorium.cn/3d/VCOE2100080-S3R1/")
+                .load(`${modelName}.mtl`, function (materials) {
+                    materials.preload();
+                    loader.setMaterials(materials);
+                    console.log('111')
+                    loader.load(`https://liyang-assets.explorium.cn/3d/VCOE2100080-S3R1/${modelName}.obj`,
+                        function (obj) {
+                            console.log('222')
+                            object = obj;
+                        },
+                        onProgress,
+                        onError
+                    );
+                });
+
+            window.addEventListener("resize", onWindowResize);
         }
 
-        // Everything is now fully loaded
-        Config.isLoaded = true;
-        this.container.querySelector('#loading').style.display = 'none';
-      };
-    });
+        function onWindowResize() {
+            renderer.setSize(window.innerWidth, window.innerHeight);
 
-    // Start render which does not wait for model fully loaded
-    this.render();
-  }
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
 
-  render() {
-    // Render rStats if Dev
-    if(Config.isDev && Config.isShowingStats) {
-      Stats.start();
+            render();
+        }
+
+        function render() {
+            renderer.render(scene, camera);
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            render();
+        }
+
+        init();
+        animate();
     }
 
-    // Call render function and pass in created scene and camera
-    this.renderer.render(this.scene, this.camera.threeCamera);
-
-    // rStats has finished determining render call now
-    if(Config.isDev && Config.isShowingStats) {
-      Stats.end();
-    }
-
-    // Delta time is sometimes needed for certain updates
-    //const delta = this.clock.getDelta();
-
-    // Call any vendor or module frame updates here
-    TWEEN.update();
-    this.controls.threeControls.update();
-
-    // RAF
-    requestAnimationFrame(this.render.bind(this)); // Bind the main class instead of window object
-  }
 }
