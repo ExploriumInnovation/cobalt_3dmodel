@@ -20,9 +20,27 @@ export default class Main {
         let modelName = 'VCOE2100080-S3R1_0'
         let urlSearch = window.location.search.replace(/^\?/, "")
         let urlArgs = qs(urlSearch)
+        let pointLightColor = 0x636363;
+        let ambientLightColor = 0xffffff;
+        let pointLightVal = 0.1
+        let ambientLightVal = 0.8
+
+        if(urlArgs.point_light_color)
+            pointLightColor = urlArgs['point_light_color']
+        
+        if(urlArgs.ambient_light_color)
+            ambientLightColor = urlArgs['ambient_light_color']
+        
+        if(urlArgs.point_light)
+            pointLightVal = parseFloat(urlArgs['point_light'])
+        
+        if(urlArgs.ambient_light)
+            ambientLightVal = parseFloat(urlArgs['ambient_light'])
+        
         if(urlArgs.model)
             modelName = urlArgs['model']
-
+        
+        console.log('urlArgs:', urlArgs)
 
         function setContent(object) {
             object.updateMatrixWorld();
@@ -43,10 +61,11 @@ export default class Main {
         }
         function init() {
             // renderer
-            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, domElement: container });
             renderer.setClearColor('#B8B8B8', 1.0);
             renderer.setSize(window.innerWidth, window.innerHeight);
-            document.body.appendChild(renderer.domElement);
+            // document.body.appendChild(container);
+            // document.body.appendChild(renderer.domElement);
 
             renderer.outputEncoding = THREE.sRGBEncoding;
 
@@ -71,7 +90,7 @@ export default class Main {
                 console.log("object1:", object);
                 setContent(object);
                 scene.add(object);
-                // container.querySelector('#loading').style.display = 'none';
+                container.querySelector('#loading').style.display = 'none';
                 // if(object) {
                 //     console.log("object:", object);
                 //     setContent(object);
@@ -97,7 +116,8 @@ export default class Main {
 
             function onError() { }
             // controls
-            const controls = new OrbitControls(camera, renderer.domElement);
+            const controls = new OrbitControls(camera, container);
+            // const controls = new OrbitControls(camera, renderer.domElement);
             controls.addEventListener("change", render);
             controls.minDistance = 100;
             controls.maxDistance = 500;
@@ -105,17 +125,15 @@ export default class Main {
             controls.enableDamping = true;
             // controls.dampingFactor = .9;
 
-            // ambient
-            // scene.add(new THREE.AmbientLight(0xffffff, 0.2));
-
             // light
-            const light = new THREE.PointLight(0xffffff, 0.1);
+            const light = new THREE.PointLight(pointLightColor, pointLightVal);
             camera.add(light);
+            // console.log('lig33333')
 
-            const lightRes = new THREE.AmbientLight( 0xffffff, 0.8 );
-            lightRes.position.x = 300;
-            lightRes.position.y = 300;
-            lightRes.position.z = 0;
+            const lightRes = new THREE.AmbientLight(ambientLightColor, ambientLightVal);
+            lightRes.position.x = 200;
+            lightRes.position.y = - 300;
+            lightRes.position.z = 100;
             scene.add( lightRes );
 
             const mtlloader = new MTLLoader(manager);

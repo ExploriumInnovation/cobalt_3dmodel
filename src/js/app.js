@@ -1,6 +1,6 @@
 import Config from './data/config';
 import Detector from './utils/detector';
-import Main from './app/main';
+import Main from './app/main3';
 
 // Styles
 import './../css/app.scss';

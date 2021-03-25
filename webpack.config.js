@@ -127,6 +127,7 @@ module.exports = env => {
 
     devServer: {
       static: 'src/public',
+      hot: true
     },
 
     plugins: plugins.concat(
